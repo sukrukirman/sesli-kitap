@@ -34,12 +34,10 @@ body {
 
 /* Range Slider Styling */
 input[type=range] {
-  appearance: none;
   -webkit-appearance: none;
   background: transparent;
 }
 input[type=range]::-webkit-slider-thumb {
-  appearance: none;
   -webkit-appearance: none;
   height: 12px;
   width: 12px;

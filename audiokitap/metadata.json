@@ -1,0 +1,5 @@
+{
+  "name": "AudioKitap",
+  "description": "Modern sesli kitap dinleme ve indirme platformu.",
+  "requestFramePermissions": []
+}
