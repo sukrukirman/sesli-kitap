@@ -1,5 +1,6 @@
 import React from 'react';
-import { Home, Search, Library, BookOpen } from 'lucide-react';
+import { Home, Search, Library, BookOpen, LogOut } from 'lucide-react';
+import { logoutAppAction } from '@/app/actions/auth';
 
 interface NavItemProps {
   icon: React.ReactElement;
@@ -50,13 +51,22 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
         <NavItem icon={<Search />} label="Keşfet" active={activeTab === 'search'} onClick={() => setActiveTab('search')} />
         <NavItem icon={<Library />} label="Kitaplığım" active={activeTab === 'library'} onClick={() => setActiveTab('library')} />
       </nav>
+      <div className="p-4 border-t border-white/5">
+        <button
+          onClick={() => logoutAppAction()}
+          className="w-full flex items-center gap-4 px-4 py-3 rounded-lg font-medium text-red-500/70 hover:text-red-500 hover:bg-red-500/10 transition-all duration-200"
+        >
+          <LogOut className="w-5 h-5" />
+          Çıkış Yap
+        </button>
+      </div>
     </aside>
   );
 }
 
 export function MobileNav({ activeTab, setActiveTab }: SidebarProps) {
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050505] border-t border-white/5 flex justify-around py-3 z-40 pb-safe">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#050505] border-t border-white/5 flex justify-around pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] z-40">
       <MobileNavItem icon={<Home />} label="Ana Sayfa" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
       <MobileNavItem icon={<Search />} label="Keşfet" active={activeTab === 'search'} onClick={() => setActiveTab('search')} />
       <MobileNavItem icon={<Library />} label="Kitaplığım" active={activeTab === 'library'} onClick={() => setActiveTab('library')} />

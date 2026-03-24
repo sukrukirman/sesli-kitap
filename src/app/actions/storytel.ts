@@ -32,7 +32,9 @@ function mapStorytelBookToUI(b: any): UITypeBook {
   };
 }
 
-export async function loginAction(email: string, pass: string) {
+import { createClient } from '@/utils/supabase/server';
+
+export async function linkStorytelAction(email: string, pass: string) {
   try {
     console.log('[DEBUG] Attempting login for:', email);
     const storytel = new Storytel();
@@ -54,6 +56,23 @@ export async function loginAction(email: string, pass: string) {
         maxAge: 60 * 60 * 24 * 7 // 1 week
     });
     console.log('[DEBUG] Cookie set successfully');
+
+    // Update Supabase profile
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    if (authUser) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ storytel_connected: true })
+        .eq('id', authUser.id);
+        
+      if (error) {
+        console.error('[DEBUG] Failed to update profile storytel_connected status:', error.message);
+      } else {
+        console.log('[DEBUG] Profile updated with storytel_connected = true');
+      }
+    }
 
     return { success: true };
   } catch (error: any) {

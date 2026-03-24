@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Download, CheckCircle, Moon, X, Clock } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipBack, SkipForward, Volume2, Download, CheckCircle, Moon, X, Clock } from 'lucide-react';
 import { Book } from '@/types';
 import { useOfflineAudio } from '@/hooks/useOfflineAudio';
+import { getListeningHistory, saveListeningHistory } from '@/app/actions/history';
 
 interface PlayerProps {
   currentBook: Book | null;
@@ -23,6 +24,7 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastSavedTimeRef = useRef<number>(0);
+  const lastDbSaveTimeRef = useRef<number>(0);
   const { downloadedBooks, downloading, downloadProgress, downloadBook, cancelDownload, removeBook, getAudioSource } = useOfflineAudio();
 
   useEffect(() => {
@@ -88,11 +90,49 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
     }
   }, [sleepTimer, setIsPlaying]);
 
+  const dbProgressRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (currentBook) {
+      dbProgressRef.current = null;
+      getListeningHistory(currentBook.id.toString()).then(res => {
+         if (res.success && res.position !== null) {
+             dbProgressRef.current = res.position;
+             if (audioRef.current && audioRef.current.duration > 0) {
+                 const dbTime = res.position;
+                 const currentVal = audioRef.current.currentTime;
+                 if (dbTime > currentVal + 5 && dbTime < audioRef.current.duration) {
+                    audioRef.current.currentTime = dbTime;
+                    setCurrentTime(dbTime);
+                    setProgress((dbTime / audioRef.current.duration) * 100);
+                    lastSavedTimeRef.current = dbTime;
+                    lastDbSaveTimeRef.current = dbTime;
+                 }
+             }
+         }
+      });
+    }
+  }, [currentBook]);
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (isExpanded) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isExpanded]);
   const handleTimeUpdate = () => {
     if (audioRef.current && currentBook) {
       const time = audioRef.current.currentTime;
-      setCurrentTime(time);
-      setProgress((time / audioRef.current.duration) * 100);
+      
+      if (!isDragging) {
+        setCurrentTime(time);
+        setProgress((time / audioRef.current.duration) * 100);
+      }
       
       // Save progress to localStorage every ~1 second to remember where user left off
       if (Math.abs(time - lastSavedTimeRef.current) > 1) {
@@ -100,6 +140,12 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
         localStorage.setItem(`book-percentage-${currentBook.id}`, ((time / audioRef.current.duration) * 100).toString());
         localStorage.setItem(`book-progress-timestamp-${currentBook.id}`, Date.now().toString());
         lastSavedTimeRef.current = time;
+      }
+
+      // Save progress to DB every ~10 seconds
+      if (Math.abs(time - lastDbSaveTimeRef.current) > 10) {
+         saveListeningHistory(currentBook.id.toString(), Math.floor(time));
+         lastDbSaveTimeRef.current = time;
       }
     }
   };
@@ -109,46 +155,59 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
       setDuration(audioRef.current.duration);
       
       // Restore previous progress
-      // Restore previous progress
       const savedTimeStr = localStorage.getItem(`book-progress-${currentBook.id}`);
       
-      let timeToRestore = 0;
       const localProgress = savedTimeStr ? Number(savedTimeStr) : 0;
-
       const apiProgress = currentBook.bookmarkPos ? currentBook.bookmarkPos / 1000000 : 0; // microseconds to seconds
+      const dbProgress = dbProgressRef.current || 0;
 
       console.log('[DEBUG] Player restore logic variables:', {
         apiPosRaw: currentBook.bookmarkPos,
         apiProgress,
         localProgress,
         savedTimeStr,
+        dbProgress
       });
 
-      if (!isNaN(localProgress) && localProgress >= apiProgress) {
-          // Local storage is further along or tied
-          timeToRestore = localProgress;
-      } else if (apiProgress > localProgress) {
-          // API is further along
-          timeToRestore = apiProgress;
-      } else {
-          timeToRestore = !isNaN(localProgress) ? localProgress : 0;
-      }
+      const timeToRestore = Math.max(
+        !isNaN(localProgress) ? localProgress : 0, 
+        apiProgress, 
+        dbProgress
+      );
 
       if (timeToRestore > 0 && timeToRestore < audioRef.current.duration) {
          audioRef.current.currentTime = timeToRestore;
-         setCurrentTime(timeToRestore);
-         setProgress((timeToRestore / audioRef.current.duration) * 100);
+         if (!isDragging) {
+             setCurrentTime(timeToRestore);
+             setProgress((timeToRestore / audioRef.current.duration) * 100);
+         }
       }
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = (Number(e.target.value) / 100) * duration;
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    const time = (val / 100) * duration;
+    setCurrentTime(time);
+    setProgress(val);
+  };
+
+  const handleSeekCommit = (e: React.SyntheticEvent<HTMLInputElement>) => {
+    setIsDragging(false);
     if (audioRef.current) {
+      const val = Number(e.currentTarget.value);
+      const time = (val / 100) * duration;
       audioRef.current.currentTime = time;
-      setCurrentTime(time);
-      setProgress(Number(e.target.value));
+      
+      // If it stalled due to seeking while isPlaying is true
+      if (isPlaying && audioRef.current.paused) {
+         audioRef.current.play().catch(() => setIsPlaying(false));
+      }
     }
+  };
+
+  const handleSeekStart = () => {
+    setIsDragging(true);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,7 +260,8 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
         onEnded={() => setIsPlaying(false)}
       />
       
-      <div className={`fixed left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-white/5 px-4 md:px-6 py-3 flex items-center justify-between transition-transform duration-300 z-50 ${currentBook ? 'translate-y-0' : 'translate-y-[150%]'} bottom-16 md:bottom-0`}>
+      {/* --- DESKTOP PLAYER --- */}
+      <div className={`hidden md:flex fixed left-0 right-0 bottom-0 bg-[#141414]/95 backdrop-blur-xl border-t border-white/5 px-6 py-3 items-center justify-between transition-transform duration-300 z-50 ${currentBook ? 'translate-y-0' : 'translate-y-[150%]'}`}>
         {/* Track Info */}
         <div className="flex items-center gap-3 md:gap-4 w-1/4 min-w-[150px]">
           {currentBook && (
@@ -273,7 +333,11 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
                 min="0"
                 max="100"
                 value={progress || 0}
-                onChange={handleSeek}
+                onChange={handleSeekChange}
+                onMouseDown={handleSeekStart}
+                onTouchStart={handleSeekStart}
+                onMouseUp={handleSeekCommit}
+                onTouchEnd={handleSeekCommit}
                 className="w-full z-10 opacity-0 cursor-pointer h-full"
               />
               <div className="absolute left-0 right-0 h-1.5 bg-white/10 rounded-full pointer-events-none group-hover:h-2.5 transition-all" />
@@ -381,6 +445,182 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
              )}
           </div>
         </div>
+      </div>
+      
+      {/* --- MOBILE MINIMIZED PLAYER --- */}
+      <div 
+        onClick={() => setIsExpanded(true)}
+        className={`md:hidden fixed left-0 right-0 bottom-[calc(70px+env(safe-area-inset-bottom))] bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-white/10 px-3 py-2 flex items-center justify-between transition-transform duration-300 z-40 ${currentBook && !isExpanded ? 'translate-y-0' : 'translate-y-[150%]'}`}
+      >
+        <div className="flex items-center gap-3 overflow-hidden flex-1">
+           <img src={currentBook?.coverUrl} className="w-10 h-10 rounded shadow-sm object-cover" alt="Cover" />
+           <div className="flex flex-col truncate pr-2">
+              <span className="text-sm font-semibold text-white truncate">{currentBook?.title}</span>
+              <span className="text-xs text-white/50 truncate">{currentBook?.author}</span>
+           </div>
+        </div>
+        <div className="flex items-center gap-2 pl-2">
+           <button 
+             onClick={(e) => { e.stopPropagation(); setIsPlaying(!isPlaying); }}
+             className="w-10 h-10 flex items-center justify-center text-white"
+           >
+             {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-1" />}
+           </button>
+        </div>
+        {/* Minimized Progress Bar */}
+        <div className="absolute bottom-0 left-0 h-[2px] bg-white/10 w-full" />
+        <div className="absolute bottom-0 left-0 h-[2px] bg-brand transition-all" style={{width: `${progress}%`}} />
+      </div>
+
+      {/* --- MOBILE FULL SCREEN PLAYER --- */}
+      <div className={`md:hidden fixed inset-0 bg-[#0a0a0a] z-50 flex flex-col transition-transform duration-300 ease-in-out ${isExpanded && currentBook ? 'translate-y-0' : 'translate-y-[100%]'}`}>
+         {/* Top Bar */}
+         <div className="flex items-center justify-between pt-[calc(1rem+env(safe-area-inset-top))] px-4 pb-4 shrink-0">
+            <button onClick={() => setIsExpanded(false)} className="p-2 text-white/70 hover:text-white">
+               <ChevronDown className="w-7 h-7" />
+            </button>
+            <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest text-center">Şu An Çalıyor</span>
+            <div className="w-11" /> {/* Spacer */}
+         </div>
+         
+         {/* Large Cover Art */}
+         <div className="flex-1 flex items-center justify-center p-8 min-h-0">
+            <img src={currentBook?.coverUrl} className="w-full max-w-[280px] aspect-square object-cover rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]" alt="Cover" />
+         </div>
+
+         {/* Track Info */}
+         <div className="px-6 pb-6 shrink-0">
+            <h2 className="text-2xl font-bold text-white mb-1 line-clamp-2">{currentBook?.title}</h2>
+            <p className="text-lg text-white/50 line-clamp-1">{currentBook?.author}</p>
+         </div>
+
+         {/* Progress Bar & Times */}
+         <div className="px-6 pb-4 shrink-0">
+            <div className="relative flex items-center group h-6 cursor-pointer">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={progress || 0}
+                onChange={handleSeekChange}
+                onMouseDown={handleSeekStart}
+                onTouchStart={handleSeekStart}
+                onMouseUp={handleSeekCommit}
+                onTouchEnd={handleSeekCommit}
+                className="w-full z-10 opacity-0 cursor-pointer h-full"
+              />
+              <div className="absolute left-0 right-0 h-1.5 bg-white/10 rounded-full pointer-events-none" />
+              <div className="absolute left-0 h-1.5 bg-brand rounded-full pointer-events-none transition-all" style={{ width: `${progress}%` }} />
+              <div 
+                className="absolute w-3 h-3 bg-white rounded-full shadow pointer-events-none z-20" 
+                style={{ left: `calc(${progress}% - 6px)` }}
+               />
+            </div>
+            <div className="flex justify-between items-center text-xs text-white/50 font-mono mt-2">
+               <span>{formatTime(currentTime)}</span>
+               <span>{formatTime(duration)}</span>
+            </div>
+         </div>
+
+         {/* Main Controls */}
+         <div className="px-6 pb-8 flex items-center justify-between shrink-0">
+            <button onClick={() => skip(-30)} className="text-white/70 hover:text-white p-2">
+              <SkipBack className="w-7 h-7" />
+            </button>
+            <button
+               onClick={() => setIsPlaying(!isPlaying)}
+               className="w-20 h-20 rounded-full bg-brand text-black flex items-center justify-center shadow-[0_0_30px_rgba(255,87,34,0.3)]"
+            >
+              {isPlaying ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1.5" />}
+            </button>
+            <button onClick={() => skip(30)} className="text-white/70 hover:text-white p-2">
+              <SkipForward className="w-7 h-7" />
+            </button>
+         </div>
+         
+         {/* Bottom Utilities */}
+         <div className="px-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))] mb-2 flex justify-between items-center text-white/50 shrink-0">
+            {/* Speed */}
+            <div className="relative">
+               <button
+                  onClick={() => { setIsSpeedMenuOpen(!isSpeedMenuOpen); setIsTimerMenuOpen(false); }}
+                  className={`text-sm font-bold px-3 py-2 rounded-full transition-colors flex items-center justify-center min-w-[3rem] ${playbackRate !== 1 ? 'bg-brand/20 text-brand' : 'bg-white/5 hover:text-white'}`}
+               >
+                  {playbackRate}x
+               </button>
+               {isSpeedMenuOpen && (
+                 <div className="absolute bottom-full left-0 mb-4 w-32 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden py-2 animate-in fade-in slide-in-from-bottom-2 z-50">
+                    <div className="px-4 py-2 border-b border-white/10 flex items-center justify-between">
+                       <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Hız</span>
+                    </div>
+                    {[0.75, 1, 1.25, 1.5, 2].map(rate => (
+                       <button
+                         key={rate}
+                         onClick={() => handleSpeedChange(rate)}
+                         className={`w-full px-4 py-2 text-sm text-left hover:bg-white/5 transition-colors flex items-center justify-between ${playbackRate === rate ? 'text-brand font-semibold' : 'text-white/70'}`}
+                       >
+                         {rate}x
+                         {playbackRate === rate && <CheckCircle className="w-3 h-3" />}
+                       </button>
+                    ))}
+                 </div>
+               )}
+            </div>
+
+            {/* Download */}
+            {currentBook?.audioUrl && (
+               <button
+                  onClick={() => {
+                    if (downloading === currentBook.id.toString()) cancelDownload(currentBook.id.toString());
+                    else if (downloadedBooks.has(currentBook.id.toString())) removeBook(currentBook.id.toString(), currentBook.audioUrl!);
+                    else downloadBook(currentBook, currentBook.audioUrl!);
+                  }}
+                  className={`p-3 rounded-full transition-colors ${downloading === currentBook.id.toString() || downloadedBooks.has(currentBook.id.toString()) ? 'bg-brand/20 text-brand' : 'bg-white/5 hover:text-white'}`}
+               >
+                  {downloadedBooks.has(currentBook.id.toString()) ? <CheckCircle className="w-5 h-5" /> : <Download className="w-5 h-5" />}
+               </button>
+            )}
+
+            {/* Sleep Timer */}
+            <div className="relative flex justify-end">
+               <button 
+                  onClick={() => { setIsTimerMenuOpen(!isTimerMenuOpen); setIsSpeedMenuOpen(false); }}
+                  className={`p-3 rounded-full transition-colors flex items-center gap-1.5 ${sleepTimer ? 'bg-brand/20 text-brand' : 'bg-white/5 hover:text-white'}`}
+               >
+                  <Moon className="w-5 h-5" />
+                  {sleepTimer && <span className="text-xs font-bold">{formatTimer(sleepTimer)}</span>}
+               </button>
+               {isTimerMenuOpen && (
+                 <div className="absolute bottom-full right-0 mb-4 w-48 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden py-2 animate-in fade-in slide-in-from-bottom-2 z-50">
+                    <div className="px-4 py-2 border-b border-white/10 flex items-center justify-between">
+                       <span className="text-xs font-bold text-white/50 uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> Zamanlayıcı</span>
+                       {sleepTimer && (
+                          <button onClick={() => { setSleepTimer(null); setIsTimerMenuOpen(false); }} className="text-white/50 hover:text-red-400">
+                             <X className="w-3.5 h-3.5" />
+                          </button>
+                       )}
+                    </div>
+                    {[5, 10, 15, 20, 30].map(mins => (
+                       <button
+                         key={mins}
+                         onClick={() => { setSleepTimer(mins * 60); setIsTimerMenuOpen(false); }}
+                         className={`w-full px-4 py-2.5 text-sm text-left hover:bg-white/5 transition-colors flex items-center justify-between ${sleepTimer && sleepTimer > (mins - 1) * 60 && sleepTimer <= mins * 60 ? 'text-brand font-semibold' : 'text-white/70'}`}
+                       >
+                         {mins} Dakika
+                         {sleepTimer && sleepTimer > (mins - 1) * 60 && sleepTimer <= mins * 60 && <CheckCircle className="w-3 h-3" />}
+                       </button>
+                    ))}
+                    <button
+                       onClick={() => { setSleepTimer(60 * 60); setIsTimerMenuOpen(false); }}
+                       className={`w-full px-4 py-2.5 text-sm text-left hover:bg-white/5 transition-colors flex items-center justify-between ${sleepTimer && sleepTimer > 30 * 60 ? 'text-brand font-semibold' : 'text-white/70'}`}
+                    >
+                       1 Saat
+                       {sleepTimer && sleepTimer > 30 * 60 && <CheckCircle className="w-3 h-3" />}
+                    </button>
+                 </div>
+               )}
+            </div>
+         </div>
       </div>
     </>
   );

@@ -168,17 +168,17 @@ export default function Home() {
                 <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-8">
                   {activeTab === 'home' ? <Play className="w-10 h-10 text-white/20" /> : <Search className="w-10 h-10 text-white/20" />}
                 </div>
-                <h2 className="text-3xl font-bold mb-4">{activeTab === 'home' ? 'Giriş Yaparak Başlayın' : 'Yeni Kitaplar Keşfedin'}</h2>
+                <h2 className="text-3xl font-bold mb-4">{activeTab === 'home' ? 'Storytel Hesabınızı Bağlayın' : 'Yeni Kitaplar Keşfedin'}</h2>
                 <p className="text-white/50 mb-10 max-w-md mx-auto text-lg leading-relaxed">
                   {activeTab === 'home' 
-                    ? 'Storytel kütüphanenize gerçek erişim sağlamak, çevrimiçi kitap dinlemek veya indirmek için hesabınıza giriş yapın.' 
-                    : 'Storytel veritabanında arama yapabilmek ve yeni kitaplar keşfedebilmek için giriş yapmalısınız.'}
+                    ? 'Storytel kütüphanenize gerçek erişim sağlamak, çevrimiçi kitap dinlemek veya indirmek için hesabınızı bağlayın.' 
+                    : 'Storytel veritabanında arama yapabilmek ve yeni kitaplar keşfedebilmek için Storytel hesabınızı bağlamalısınız.'}
                 </p>
                 <button
-                  onClick={() => router.push('/login')}
+                  onClick={() => router.push('/link-storytel')}
                   className="bg-brand text-white px-10 py-3.5 rounded-full font-bold text-lg hover:bg-brand-hover transition-transform hover:scale-105 shadow-xl shadow-brand/20"
                 >
-                  Hesaba Giriş Yap
+                  Storytel'i Bağla
                 </button>
              </div>
           )}
