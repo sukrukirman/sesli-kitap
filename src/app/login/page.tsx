@@ -2,20 +2,18 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { loginAppAction } from '@/app/actions/auth';
+import { continueWithUsernameAction } from '@/app/actions/auth';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (formData: FormData) => {
+  const handleAuth = async (formData: FormData) => {
     setLoading(true);
     setError('');
 
-    const result = await loginAppAction(formData);
+    const result = await continueWithUsernameAction(formData);
     
-    // loginAppAction redirects on success. 
-    // If it returns, it implies there was an error.
     setLoading(false);
     if (result?.error) {
       setError(result.error);
@@ -25,29 +23,20 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background text-white p-4">
       <div className="w-full max-w-md bg-surface p-8 rounded-2xl shadow-xl border border-white/5">
-        <h1 className="text-3xl font-serif font-bold text-center mb-2">Giriş Yap</h1>
-        <p className="text-white/50 text-center mb-8">Uygulamaya hoş geldiniz</p>
+        <h1 className="text-3xl font-serif font-bold text-center mb-2">Hoş Geldiniz</h1>
+        <p className="text-white/50 text-center mb-8">Devam etmek için bir kullanıcı adı girmeniz yeterli.</p>
         
-        <form action={handleLogin} className="space-y-4">
+        <form action={handleAuth} className="space-y-4">
           {error && <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-500 text-sm text-center">{error}</div>}
           <div>
-            <label className="block text-sm font-medium text-white/70 mb-1">E-posta</label>
+            <label className="block text-sm font-medium text-white/70 mb-1">Kullanıcı Adı</label>
             <input 
-              name="email"
-              type="email" 
+              name="username"
+              type="text" 
               required
+              minLength={3}
               className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-brand transition-colors text-white" 
-              placeholder="E-posta adresiniz"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-white/70 mb-1">Şifre</label>
-            <input 
-              name="password"
-              type="password" 
-              required
-              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-brand transition-colors text-white" 
-              placeholder="Şifreniz"
+              placeholder="Sadece isminizi yazın"
             />
           </div>
           <button 
@@ -55,16 +44,9 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-brand text-white font-semibold rounded-xl py-3 hover:bg-brand-hover transition-colors mt-4 disabled:opacity-50"
           >
-            {loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+            {loading ? 'İşleniyor...' : 'Devam Et'}
           </button>
         </form>
-        
-        <div className="mt-6 text-center text-sm text-white/60">
-          Hesabınız yok mu?{' '}
-          <Link href="/signup" className="text-brand hover:underline">
-            Kayıt Ol
-          </Link>
-        </div>
       </div>
     </div>
   );

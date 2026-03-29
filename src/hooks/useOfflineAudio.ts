@@ -33,6 +33,16 @@ export function useOfflineAudio() {
 
   const downloadBook = async (book: Book, url: string) => {
     const id = book.id.toString();
+    
+    // Zaten indirilmişse tekrar indirmeyi engelle
+    const currentStoredIds = JSON.parse(localStorage.getItem('downloadedBooks') || '[]');
+    if (currentStoredIds.includes(id) || downloadedBooks.has(id)) {
+      console.log('[OfflineAudio] Kitap zaten indirilmiş, atlanıyor:', book.title);
+      return;
+    }
+
+    if (downloading === id) return;
+
     const controller = new AbortController();
     
     setAbortControllers(prev => ({ ...prev, [id]: controller }));
@@ -78,19 +88,8 @@ export function useOfflineAudio() {
           headers: response.headers
       });
 
-      // Clone response to put in cache AND download to OS
-      const responseClone = newResponse.clone();
+      // Sadece Cache API'ye kaydet (PWA mantığı - OS indirmesi yapılmaz)
       await cache.put(url, newResponse);
-
-      // Trigger OS Download
-      const objectUrl = window.URL.createObjectURL(await responseClone.blob());
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = `${book.title} - ${book.author} [${book.id}].mp3`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(objectUrl);
 
       // Save book details to localStorage so we can display the library without network/login
       const currentStoredBooks: Book[] = JSON.parse(localStorage.getItem('offlineBookData') || '[]');
@@ -151,18 +150,32 @@ export function useOfflineAudio() {
     }
   };
 
-  const getAudioSource = async (url: string | undefined): Promise<string> => {
+  const getAudioSource = async (url: string | undefined, bookId?: string): Promise<string> => {
     if(!url) return "";
     try {
+      // 1. Check local storage
+      let isDownloadedLocally = false;
+      if (bookId) {
+        const storedIds = JSON.parse(localStorage.getItem('downloadedBooks') || '[]');
+        isDownloadedLocally = storedIds.includes(bookId) || downloadedBooks.has(bookId);
+      }
+
+      // 2. Check cache
       const cache = await caches.open(CACHE_NAME);
-      const response = await cache.match(url);
-      if (response) {
+      const response = await cache.match(url, { ignoreSearch: true });
+      
+      if (response && (isDownloadedLocally || !bookId)) {
+        console.log(`[OfflineAudio] Kitap indirilenlerden/önbellekten oynatılıyor: ${bookId || 'Bilinmeyen ID'}`);
         const blob = await response.blob();
         return URL.createObjectURL(blob);
+      } else if (isDownloadedLocally && !response) {
+        console.warn(`[OfflineAudio] Kitap ${bookId} local storage'da indirilmiş görünüyor ama cache'de bulunamadı!`);
       }
     } catch (error) {
       console.error('Failed to get from cache', error);
     }
+    
+    console.log(`[OfflineAudio] Kitap ağdan stream ediliyor: ${url}`);
     return url; // Fallback to network
   };
 

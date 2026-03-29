@@ -30,7 +30,7 @@ export function Player({ currentBook, isPlaying, setIsPlaying }: PlayerProps) {
   useEffect(() => {
     if (currentBook && currentBook.audioUrl && audioRef.current) {
       const loadAudio = async () => {
-        const src = await getAudioSource(currentBook.audioUrl!);
+        const src = await getAudioSource(currentBook.audioUrl!, currentBook.id.toString());
         if (audioRef.current) {
           audioRef.current.src = src;
           lastSavedTimeRef.current = 0; // reset active saver

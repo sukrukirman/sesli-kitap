@@ -3,39 +3,67 @@
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 
-export async function loginAppAction(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
-  const supabase = await createClient();
+function generateCredentials(username: string) {
+  const charMap: Record<string, string> = {
+    'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u',
+    'Ç': 'c', 'Ğ': 'g', 'İ': 'i', 'Ö': 'o', 'Ş': 's', 'Ü': 'u',
+  };
   
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  let safeUsername = username.trim().toLowerCase();
+  safeUsername = safeUsername.replace(/[çğşıöü]/g, match => charMap[match] || match);
+  safeUsername = safeUsername.replace(/[^a-z0-9]/g, '');
+  
+  if (safeUsername.length === 0) safeUsername = 'user';
 
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  redirect('/');
+  const email = `${safeUsername}@storytel.app`;
+  const password = `${safeUsername}-Secret-123!`;
+  return { email, password, safeUsername };
 }
 
-export async function signupAppAction(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
+export async function continueWithUsernameAction(formData: FormData) {
+  const usernameParam = formData.get('username') as string;
+  if (!usernameParam) return { success: false, error: 'Kullanıcı adı gerekli' };
+
+  if (usernameParam.trim().length < 3) {
+    return { success: false, error: 'Kullanıcı adı en az 3 karakter olmalıdır' };
+  }
+
+  const { email, password } = generateCredentials(usernameParam);
   const supabase = await createClient();
   
-  const { error } = await supabase.auth.signUp({
+  // Önce doğrudan giriş yapmayı deniyoruz
+  const { error: signInError } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
-  if (error) {
-    return { success: false, error: error.message };
+  if (!signInError) {
+    // Başarıyla giriş yapıldı (Hesap daha önce oluşturulmuş)
+    redirect('/');
   }
 
-  // After signup we log them in and redirect
-  redirect('/');
+  // Eğer giriş hatası 'Kullanıcı bulunamadı/Email hatalı' tarzındaysa, Demek ki hesap yok, yeni kayıt açıyoruz:
+  if (signInError.message.includes('Invalid login credentials')) {
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username: usernameParam, // Orijinal ismi Supabase meta verilerinde saklıyoruz
+        }
+      }
+    });
+
+    if (signUpError) {
+      return { success: false, error: signUpError.message };
+    }
+    
+    // Kayıt oluşturuldu ve otomatik giriş sağlandı
+    redirect('/');
+  }
+
+  // Geriye kalan farklı bir bağlantı/sistem hatası varsa göster
+  return { success: false, error: signInError.message };
 }
 
 export async function logoutAppAction() {
