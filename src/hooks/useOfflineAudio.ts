@@ -184,21 +184,25 @@ export function useOfflineAudio() {
       const cache = await caches.open(CACHE_NAME);
       
       // Attempt to extract book ID from filename pattern: "Title - Author [ID].mp3"
-      const match = file.name.match(/\[(.*?)\]\.mp3$/);
+      const match = file.name.match(/\[(.*?)\]\.mp3$/i);
       const extractedId = match ? match[1] : null;
       
       const id = extractedId || `local-${Date.now()}`;
-      const url = `/local-audio/${id}`;
+      // Tam bir URL oluşturmak (bazı tarayıcılar Cache API'sinde mutlak URL bekleyebilir)
+      const url = new URL(`/local-audio/${id}`, window.location.origin).toString();
       
+      // Content-Length başlığını manuel atamak Response constructor'ında TypeError fırlatabilir.
+      // Tarayıcı Blob/File gönderildiğinde bunu otomatik ayarlar.
       const newResponse = new Response(file, {
           status: 200,
           statusText: 'OK',
           headers: new Headers({
-            'Content-Type': file.type || 'audio/mpeg',
-            'Content-Length': file.size.toString()
+            'Content-Type': file.type || 'audio/mpeg'
           })
       });
-      await cache.put(url, newResponse);
+      
+      const request = new Request(url);
+      await cache.put(request, newResponse);
 
       const currentStoredBooks: Book[] = JSON.parse(localStorage.getItem('offlineBookData') || '[]');
       
@@ -231,9 +235,14 @@ export function useOfflineAudio() {
       setDownloadedBooks(newDownloaded);
       localStorage.setItem('downloadedBooks', JSON.stringify(Array.from(newDownloaded)));
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Import failed', error);
-      alert('Dosya içe aktarılamadı.');
+      const isQuota = error?.name === 'QuotaExceededError' || error?.message?.toLowerCase().includes('quota');
+      if (isQuota) {
+         alert('Tarayıcınızın veya cihazınızın depolama alanı doldu (Quota Exceeded)! Lütfen büyük dosyaları silin, cihazda yer açın veya Gizli Sekme yerine normal sekme kullanın.');
+      } else {
+         alert(`Dosya içe aktarılamadı: ${error?.message || 'Bilinmeyen hata'}`);
+      }
     }
   };
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Search, Library, BookOpen, LogOut } from 'lucide-react';
+import { Home, Search, Library, BookOpen, LogOut, Unplug } from 'lucide-react';
 import { logoutAppAction } from '@/app/actions/auth';
 
 interface NavItemProps {
@@ -35,11 +35,13 @@ export function MobileNavItem({ icon, label, active, onClick }: NavItemProps) {
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  isStorytelConnected?: boolean;
+  onUnlinkStorytel?: () => void;
 }
 
-export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+export function Sidebar({ activeTab, setActiveTab, isStorytelConnected, onUnlinkStorytel }: SidebarProps) {
   return (
-    <aside className="w-64 bg-[#050505] border-r border-white/5 flex-col hidden md:flex">
+    <aside className="w-64 bg-[#050505] border-r border-white/5 flex flex-col hidden md:flex">
       <div className="p-6">
         <h1 className="text-2xl font-serif font-bold text-brand flex items-center gap-2">
           <BookOpen className="w-6 h-6" />
@@ -51,7 +53,16 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
         <NavItem icon={<Search />} label="Keşfet" active={activeTab === 'search'} onClick={() => setActiveTab('search')} />
         <NavItem icon={<Library />} label="Kitaplığım" active={activeTab === 'library'} onClick={() => setActiveTab('library')} />
       </nav>
-      <div className="p-4 border-t border-white/5">
+      <div className="p-4 border-t border-white/5 flex flex-col gap-2">
+        {isStorytelConnected && (
+          <button
+            onClick={onUnlinkStorytel}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-lg font-medium text-orange-500/70 hover:text-orange-500 hover:bg-orange-500/10 transition-all duration-200"
+          >
+            <Unplug className="w-5 h-5" />
+            Bağlantıyı Kes
+          </button>
+        )}
         <button
           onClick={() => logoutAppAction()}
           className="w-full flex items-center gap-4 px-4 py-3 rounded-lg font-medium text-red-500/70 hover:text-red-500 hover:bg-red-500/10 transition-all duration-200"

@@ -111,3 +111,29 @@ export async function getBookAudioUrlAction(bookId: string): Promise<string | nu
   // This bypasses CORS on the client, hides the token, and enables Cache API blob fetching.
   return `/api/audio/${bookId}`;
 }
+
+export async function unlinkStorytelAction() {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete(STORYTEL_COOKIE_NAME);
+
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    if (authUser) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ storytel_connected: false })
+        .eq('id', authUser.id);
+        
+      if (error) {
+        console.error('[DEBUG] Failed to update profile storytel_connected status to false:', error.message);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DEBUG] Unlink action failed:', error);
+    return { success: false, error: error.message || 'Unlink failed' };
+  }
+}

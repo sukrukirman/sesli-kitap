@@ -145,6 +145,14 @@ export default function Home() {
     }
   };
 
+  const handleUnlink = async () => {
+    if (confirm("Storytel bağlantınızı kesmek istediğinize emin misiniz?")) {
+      const { unlinkStorytelAction } = await import('@/app/actions/storytel');
+      await unlinkStorytelAction();
+      window.location.reload();
+    }
+  };
+
   if (loading) {
     return <div className="flex h-screen items-center justify-center bg-background"><div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin" /></div>;
   }
@@ -155,7 +163,12 @@ export default function Home() {
     <div className="flex h-screen bg-background text-white overflow-hidden font-sans">
       
       {/* Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar 
+         activeTab={activeTab} 
+         setActiveTab={setActiveTab} 
+         isStorytelConnected={!isGuestMode} 
+         onUnlinkStorytel={handleUnlink} 
+      />
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto relative pb-32 md:pb-24">
